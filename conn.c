@@ -3,16 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-
-// the display connection
-xcb_connection_t *conn;
-
-// setup info
-const xcb_setup_t* setup;
-// the X server's screen
-xcb_screen_t *screen;
-
-xcb_atom_t WM_STATE;
+#include "conn.h"
 
 
 void get_atom(char* name, xcb_atom_t* atom){
@@ -60,6 +51,21 @@ xcb_window_t create_window(xcb_screen_t *screen){
     return window_id;
 }
 
+xcb_gcontext_t create_graphics_context(xcb_window_t window_id){
+    // create a graphics context id
+    xcb_gcontext_t gc = xcb_generate_id(conn);
+
+    // This sets the context's foreground color to black and turns off generation of exposure events
+    uint32_t value_mask = XCB_GC_FOREGROUND | XCB_GC_GRAPHICS_EXPOSURES;
+    uint32_t value_list[2];
+    value_list[0] = screen->black_pixel;
+    value_list[1] = 0;
+
+    // create the graphics context and return the context id
+    xcb_create_gc(conn, gc, window_id, value_mask, value_list);
+    return gc;
+}
+
 void handle_events(){
 
 }
@@ -89,9 +95,51 @@ int main(){
         exit(1);
     }
     printf("Successfully accessed the X server's screen.\n");
+
+    // Create a graphics context
+    xcb_gcontext_t gc = create_graphics_context(screen->root);
+    
     
     // create a new window
     xcb_window_t window_id = create_window(screen);
+
+    // 5.2.1: points, lines and polygons
+    // define points
+    xcb_point_t points[4] = {
+        {40, 40},
+        {40, 80},
+        {80, 40},
+        {80, 80}
+    };
+    
+
+    // xcb_fill_poly example
+    xcb_point_t fill_poly_points[5] = {
+        {11, 24},
+        {30, 10},
+        {49, 24},
+        {42, 46},
+        {18, 46}
+    };
+    
+
+    // 5.2.2: Line segments
+    // define line segments
+    xcb_segment_t segments[2] = {
+        {60, 20, 90, 40},
+        {60, 40, 90, 20}
+    };
+    
+
+    // 5.2.3: Rectangles
+    // define rectangles
+    xcb_rectangle_t rect = {15, 65, 30, 20}; // x, y, width, height
+    
+
+    // 5.2.4: Arcs
+    // define arcs: angles are given in 1/64 degrees => 180 degrees = 180 << 6 ( because 2^6 = 64)
+    xcb_arc_t arc = {60, 70, 30, 20, 0, 180 << 6}; // x, y, width, height, angle1, angle2
+    
 
     // display the created window
     xcb_map_window(conn, window_id);
@@ -100,8 +148,6 @@ int main(){
     int running = 1;
     xcb_generic_event_t* event;
     while (running && (event = xcb_wait_for_event(conn))){
-        xcb_flush(conn);
-
         int xerr;
         if ((xerr = xcb_connection_has_error(conn)) != 0) {
             printf("[ERROR] The server closed the connection\n");
@@ -121,6 +167,24 @@ int main(){
                 break;
             case XCB_EXPOSE:
                 printf("XCB_EXPOSE");
+
+                // draw points on graphics context
+                xcb_poly_point(conn, XCB_COORD_MODE_ORIGIN, window_id, gc, 4, points);
+
+                // draw points on graphics context
+                xcb_fill_poly(conn, XCB_COORD_MODE_ORIGIN, window_id, gc, XCB_POLY_SHAPE_CONVEX, 5, fill_poly_points);
+
+                // draw line segments on graphics context
+                xcb_poly_segment(conn, window_id, gc, 2, segments);
+
+                // draw rectangles on graphics context
+                xcb_poly_rectangle(conn, window_id, gc, 1, &rect);
+
+                // draw arcs on graphics context
+                xcb_poly_arc(conn, window_id, gc, 1, &arc);
+
+                xcb_flush(conn);
+
                 break;
         }
         free(event);   
